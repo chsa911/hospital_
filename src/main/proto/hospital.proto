@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package hospital;
+
+option java_multiple_files = true;
+option java_package = "com.example.hospital.grpc";
+option java_outer_classname = "HospitalProto";
+
+// -------- Common DTOs --------
+message HospitalDto {
+  int64 id = 1;
+  string name = 2;
+  string address = 3;
+}
+
+message PatientDto {
+  int64 id = 1;
+  string first_name = 2;
+  string last_name = 3;
+}
+
+message StayDto {
+  int64 id = 1;
+  int64 patient_id = 2;
+  int64 hospital_id = 3;
+  string start_date = 4;  // ISO yyyy-MM-dd
+  string end_date = 5;    // ISO yyyy-MM-dd
+  bool cancelled = 6;
+}
+
+message BillDto {
+  int64 id = 1;
+  int64 patient_id = 2;
+  int64 hospital_id = 3;
+  double amount = 4;
+  bool paid = 5;
+}
+
+// -------- Requests / Responses --------
+message IdRequest { int64 id = 1; }
+
+message CreateHospitalRequest { string name = 1; string address = 2; }
+message UpdateHospitalRequest { int64 id = 1; string name = 2; string address = 3; }
+message HospitalListResponse { repeated HospitalDto hospitals = 1; }
+
+message CreatePatientRequest { string first_name = 1; string last_name = 2; }
+message UpdatePatientRequest { int64 id = 1; string first_name = 2; string last_name = 3; }
+message PatientListResponse { repeated PatientDto patients = 1; }
+
+message RegisterPatientRequest { int64 patient_id = 1; int64 hospital_id = 2; }
+
+message StayRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2;
+  string start_date = 3;
+  string end_date = 4;
+}
+
+message QuarterRequest { int64 patient_id = 1; int32 year = 2; int32 quarter = 3; }
+message QuarterSummary { int64 total_days = 1; double billed_amount = 2; }
+message StayListResponse { repeated StayDto stays = 1; }
+
+message BillRequest { int64 patient_id = 1; int64 hospital_id = 2; }
+message BillListResponse { repeated BillDto bills = 1; }
+
+message Empty {}
+
+// -------- Services --------
+service HospitalService {
+  rpc CreateHospital(CreateHospitalRequest) returns (HospitalDto);
+  rpc UpdateHospital(UpdateHospitalRequest) returns (HospitalDto);
+  rpc DeleteHospital(IdRequest) returns (Empty);
+  rpc ListHospitals(Empty) returns (HospitalListResponse);
+
+  rpc RegisterPatient(RegisterPatientRequest) returns (Empty);
+  rpc ListPatientsOfHospital(IdRequest) returns (PatientListResponse);
+  rpc ListHospitalsOfPatient(IdRequest) returns (HospitalListResponse);
+}
+
+service PatientService {
+  rpc CreatePatient(CreatePatientRequest) returns (PatientDto);
+  rpc UpdatePatient(UpdatePatientRequest) returns (PatientDto);
+  rpc DeletePatient(IdRequest) returns (Empty);
+}
+
+service StayService {
+  rpc CreateStay(StayRequest) returns (StayDto);
+  rpc CancelStay(IdRequest) returns (StayDto);
+  rpc ListStaysOfPatient(IdRequest) returns (StayListResponse);
+  rpc GetQuarterSummary(QuarterRequest) returns (QuarterSummary);
+}
+
+service BillingService {
+  rpc GenerateBill(BillRequest) returns (BillDto);
+  rpc ListBillsForPatient(IdRequest) returns (BillListResponse);
+  rpc GetOutstandingBalance(BillRequest) returns (BillDto); // amount only/paid=false
+}
