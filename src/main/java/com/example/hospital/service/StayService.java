@@ -32,7 +32,7 @@ public class StayService {
     }
 
     public List<Stay> listByPatient(Long patientId) {
-        return repo.findByPatient_Id(patientId);
+        return repo.findByPatientId(patientId);
     }
 
     public List<Stay> overlapping(Long patientId, LocalDate start, LocalDate end) {

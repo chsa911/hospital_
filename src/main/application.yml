@@ -8,6 +8,10 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+    open-in-view: false              # avoid lazy-loading surprises in gRPC handlers
+    properties:
+      hibernate:
+        format_sql: true
   h2:
     console:
       enabled: true
@@ -16,7 +20,26 @@ spring:
 grpc:
   server:
     port: 9090
+    reflectionServiceEnabled: true   # (uncomment if your lib needs this; you already have reflection working)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,beans,threaddump,heapdump,httpexchanges,loggers,configprops,mappings
+  endpoint:
+    health:
+      show-details: always
+  httpexchanges:
+    recording:
+      enabled: true
 
 logging:
   level:
-    org.hibernate.SQL: INFO
+    root: INFO
+    io.grpc: DEBUG
+    net.devh.boot.grpc: DEBUG          # if using grpc-spring-boot-starter
+    org.hibernate.SQL: DEBUG           # see executed SQL
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # see SQL bind values
+    # CHANGE THIS to your code's base package to see your service logs:
+    com.example.hospital: DEBUG

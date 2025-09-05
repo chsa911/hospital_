@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-
-@Service @RequiredArgsConstructor
+@Service
+@RequiredArgsConstructor
 public class BillingService {
 
     private static final BigDecimal DAILY_RATE = BigDecimal.valueOf(200);
@@ -26,27 +26,46 @@ public class BillingService {
     public Bill generate(Long patientId, Long hospitalId) {
         var p = patientRepo.findById(patientId).orElseThrow();
         var h = hospitalRepo.findById(hospitalId).orElseThrow();
-        List<Stay> stays = stayRepo.findByPatient_Id(patientId).stream()
+
+        // All non-cancelled stays for this hospital
+        var stays = stayRepo.findByPatientId(patientId).stream()
                 .filter(s -> s.getHospital().getId().equals(hospitalId) && !s.isCancelled())
                 .toList();
 
-        long days = stays.stream()
+        // Inclusive day count per stay
+        long totalDays = stays.stream()
                 .mapToLong(s -> ChronoUnit.DAYS.between(s.getStartDate(), s.getEndDate()) + 1)
                 .sum();
 
-        var bill = Bill.builder().patient(p).hospital(h)
-                .amount(DAILY_RATE.multiply(BigDecimal.valueOf(days)))
-                .paid(false).build();
+        // Days already billed = sum(previousAmounts) / DAILY_RATE
+        BigDecimal billedAmount = billRepo.findByPatientIdAndHospitalId(patientId, hospitalId).stream()
+                .map(Bill::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Ensure exact division (amounts are multiples of DAILY_RATE in this model)
+        long billedDays = billedAmount.divide(DAILY_RATE).longValueExact();
+
+        long unbilledDays = totalDays - billedDays;
+        if (unbilledDays <= 0) {
+            throw new IllegalStateException("No unbilled stays to generate a bill for.");
+        }
+
+        var bill = Bill.builder()
+                .patient(p)
+                .hospital(h)
+                .amount(DAILY_RATE.multiply(BigDecimal.valueOf(unbilledDays)))
+                .paid(false)
+                .build();
 
         return billRepo.save(bill);
     }
 
     public List<Bill> billsForPatient(Long patientId) {
-        return billRepo.findByPatient_Id(patientId);
+        return billRepo.findByPatientId(patientId);
     }
 
     public BigDecimal outstanding(Long patientId, Long hospitalId) {
-        return billRepo.findByPatient_IdAndHospital_IdAndPaidFalse(patientId, hospitalId).stream()
+        return billRepo.findByPatientIdAndHospitalIdAndPaidFalse(patientId, hospitalId).stream()
                 .map(Bill::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }

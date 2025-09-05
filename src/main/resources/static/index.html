@@ -1,24 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Hospital System</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 2em; }
-        h1 { color: #2c3e50; }
-        ul { margin-top: 1em; }
-        a { color: #007bff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
+        body { font-family: sans-serif; max-width: 820px; margin: 40px auto; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; }
     </style>
 </head>
 <body>
-<h1>✅ Hospital System is running</h1>
-<p>Welcome! This app exposes gRPC APIs and an H2 in-memory database.</p>
-
+<h1>Hospital System (gRPC + Spring Boot + H2)</h1>
+<p>You are seeing this page because the application is running.</p>
+<h2>Where to go</h2>
 <ul>
-    <li><a href="/h2-console">H2 Console</a></li>
-    <li>gRPC server available on <code>localhost:9090</code></li>
-    <li>Try: <code>grpcurl -plaintext localhost:9090 list</code></li>
+    <li>H2 Console: <a href="/h2-console">/h2-console</a></li>
+    <li>gRPC Endpoint (9090): use <code>grpcurl</code> or <code>grpcui</code></li>
 </ul>
+
+<h3>grpcurl examples</h3>
+<pre><code>grpcurl -plaintext localhost:9090 list
+grpcurl -plaintext -d '{"first_name":"Alice","last_name":"Smith"}' localhost:9090 hospital.PatientService/CreatePatient</code></pre>
 </body>
 </html>
