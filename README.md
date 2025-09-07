@@ -14,11 +14,11 @@
     - Service Tests für Businessregeln: Billing, Cancellations, Quarter Summaries
     - Integrationstests optional
 - **Produktionsreife Infrastruktur**
-    - Flyway Migrationen (`V1__init.sql`) + Demo Daten (`data.sql`)
-    - Profile `dev` (H2), `test` (ports=0, create-drop), `prod` (PostgreSQL-ready)
     - Logging konfiguriert (Hibernate SQL + Bind Parameter, eigenes Package auf DEBUG)
 - **Dokumentation für Entwickler**
     - `README.md` mit Quickstart & grpcurl Beispielen
+    - grpcurl -plaintext -d '{}' localhost:9090 hospital.HospitalService/ListHospitals
+
     - `ARCHITECTURE.md` (C4 Container Diagramm)
     - `DATA_MODEL.md` (ER Diagramm, Cascade-Regeln)
     - `API.md` (aus `hospital.proto` + grpcurl Beispiele)
