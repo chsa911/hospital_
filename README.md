@@ -1,4 +1,35 @@
 # Hospital Service (Spring Boot + gRPC)
+## Highlights
+
+- **Clean JPA modeling**
+    - Kein `@Data` auf Entities (nur Getter/Setter)
+    - `equals`/`hashCode` ausschließlich auf IDs
+    - Bidirektionale Beziehungen mit Helper-Methoden (`addPatient`, `removePatient`)
+- **Robuste Businesslogik**
+    - Idempotente Registrierung (`registerPatient`)
+    - Abgesicherte Fehlerbehandlung (`EntityNotFoundException` statt `Optional.get()`)
+    - Hospital-Löschung entfernt **nicht** die Patienten
+- **Tests auf allen Ebenen**
+    - Slice Tests (`@DataJpaTest`) für Repositories & Services (schnell, kein Port-Bind)
+    - Service Tests für Businessregeln: Billing, Cancellations, Quarter Summaries
+    - Integrationstests optional
+- **Produktionsreife Infrastruktur**
+    - Flyway Migrationen (`V1__init.sql`) + Demo Daten (`data.sql`)
+    - Profile `dev` (H2), `test` (ports=0, create-drop), `prod` (PostgreSQL-ready)
+    - Logging konfiguriert (Hibernate SQL + Bind Parameter, eigenes Package auf DEBUG)
+- **Dokumentation für Entwickler**
+    - `README.md` mit Quickstart & grpcurl Beispielen
+    - `ARCHITECTURE.md` (C4 Container Diagramm)
+    - `DATA_MODEL.md` (ER Diagramm, Cascade-Regeln)
+    - `API.md` (aus `hospital.proto` + grpcurl Beispiele)
+    - `RUNBOOK.md` (Ports, Profile, Troubleshooting)
+- **Tooling & Ops Awareness**
+    - Actuator Endpoints (`/health`, `/metrics`, `/env`)
+    - Reflection Service für grpcurl / Postman
+    - Bash-Skripte zum automatischen Aufruf der gRPC-Endpunkte
+- **Sofort erlebbar**
+    - `data.sql` mit Beispiel-Hospitals, Patienten, Stays & Bills
+    - `grpcurl` und PowerShell-freundliche Beispiele dokumentiert
 
 **What it does**
 - Manage hospitals & patients, register patients to hospitals
