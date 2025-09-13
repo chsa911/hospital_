@@ -16,11 +16,17 @@ public class PatientGrpcService extends PatientServiceGrpc.PatientServiceImplBas
         Patient p = svc.create(req.getFirstName(), req.getLastName());
         out.onNext(toDto(p)); out.onCompleted();
     }
-
     @Override
     public void updatePatient(UpdatePatientRequest req, StreamObserver<PatientDto> out) {
-        Patient p = svc.update(req.getId(), req.getFirstName(), req.getLastName());
-        out.onNext(toDto(p)); out.onCompleted();
+        try {
+            String first = req.hasFirstName() ? req.getFirstName().getValue() : null;
+            String last  = req.hasLastName()  ? req.getLastName().getValue()  : null;
+            Patient p = svc.update(req.getId(), first, last); // keep your service signature
+            out.onNext(toDto(p));
+            out.onCompleted();
+        } catch (Exception e) {
+            out.onError(io.grpc.Status.INTERNAL.withDescription("Failed to update patient").asRuntimeException());
+        }
     }
 
     @Override

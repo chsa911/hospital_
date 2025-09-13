@@ -14,7 +14,6 @@ public interface StayRepository extends JpaRepository<Stay, Long> {
     @Query("""
        select s from Stay s
        where s.patient.id = :patientId
-         and s.cancelled = false
          and s.startDate <= :end
          and s.endDate   >= :start
     """)

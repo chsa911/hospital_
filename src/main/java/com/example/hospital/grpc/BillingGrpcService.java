@@ -2,14 +2,15 @@ package com.example.hospital.grpc;
 
 import com.example.hospital.entity.Bill;
 import com.example.hospital.service.BillingService;
+import com.google.type.Money;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.Optional;
 
 @GrpcService
@@ -18,8 +19,10 @@ public class BillingGrpcService extends BillingServiceGrpc.BillingServiceImplBas
 
     private final BillingService svc;
 
+    // ---- RPCs ----
+
     @Override
-    public void generateBill(BillRequest req, StreamObserver<BillDto> out) {
+    public void generateBill(GenerateBillRequest req, StreamObserver<BillDto> out) {
         try {
             Bill b = svc.generate(req.getPatientId(), req.getHospitalId());
             out.onNext(toDto(b));
@@ -35,12 +38,15 @@ public class BillingGrpcService extends BillingServiceGrpc.BillingServiceImplBas
     }
 
     @Override
-    public void listBillsForPatient(IdRequest req, StreamObserver<BillListResponse> out) {
+    public void listBillsForPatient(ListBillsRequest req, StreamObserver<BillListResponse> out) {
         try {
-            List<Bill> bills = Optional.ofNullable(svc.billsForPatient(req.getId())).orElseGet(List::of);
-            var b = BillListResponse.newBuilder();
-            bills.forEach(x -> b.addBills(toDto(x)));
-            out.onNext(b.build());
+            long patientId = req.getPatientId();
+            List<Bill> bills = Optional.ofNullable(svc.billsForPatient(patientId)).orElseGet(List::of);
+
+            BillListResponse.Builder resp = BillListResponse.newBuilder();
+            bills.forEach(b -> resp.addBills(toDto(b)));
+
+            out.onNext(resp.build());
             out.onCompleted();
         } catch (Exception e) {
             e.printStackTrace();
@@ -49,17 +55,13 @@ public class BillingGrpcService extends BillingServiceGrpc.BillingServiceImplBas
     }
 
     @Override
-    public void getOutstandingBalance(BillRequest req, StreamObserver<BillDto> out) {
+    public void getOutstandingBalance(BalanceRequest req, StreamObserver<BalanceResponse> out) {
         try {
             BigDecimal amount = svc.outstanding(req.getPatientId(), req.getHospitalId());
-            double amt = amount == null ? 0.0 : amount.doubleValue();
-            out.onNext(BillDto.newBuilder()
-                    .setId(0)
-                    .setPatientId(req.getPatientId())
-                    .setHospitalId(req.getHospitalId())
-                    .setAmount(amt)
-                    .setPaid(false)
-                    .build());
+            BalanceResponse resp = BalanceResponse.newBuilder()
+                    .setOutstandingBalance(toMoney(defaultCurrency(), nz(amount)))
+                    .build();
+            out.onNext(resp);
             out.onCompleted();
         } catch (NoSuchElementException e) {
             out.onError(io.grpc.Status.NOT_FOUND.withDescription(e.getMessage()).asRuntimeException());
@@ -69,47 +71,57 @@ public class BillingGrpcService extends BillingServiceGrpc.BillingServiceImplBas
         }
     }
 
-    private static BillDto toDto(Bill b) {
-        // Prefer scalar ids if your entity exposes them (recommended to avoid lazy loads)
-        Long pid = null, hid = null;
-        try {
-            // If your Bill has getPatientId()/getHospitalId(), use those.
-            var m = Bill.class.getMethods();
-            for (var mm : m) {
-                if (mm.getName().equals("getPatientId") && mm.getParameterCount() == 0) {
-                    pid = (Long) mm.invoke(b);
-                } else if (mm.getName().equals("getHospitalId") && mm.getParameterCount() == 0) {
-                    hid = (Long) mm.invoke(b);
-                }
-            }
-        } catch (Exception ignore) {}
+    // ---- Mapping helpers ----
 
-        if (pid == null && b.getPatient() != null) {
-            // fall back to relation if present/initialized
-            pid = b.getPatient().getId();
-        }
-        if (hid == null && b.getHospital() != null) {
-            hid = b.getHospital().getId();
-        }
+    private BillDto toDto(Bill b) {
+        long idSafe  = b.getId() == null ? 0L : b.getId();
+        long pidSafe = (b.getPatient()  != null && b.getPatient().getId()  != null) ? b.getPatient().getId()  : 0L;
+        long hidSafe = (b.getHospital() != null && b.getHospital().getId() != null) ? b.getHospital().getId() : 0L;
 
-        long idSafe  = nzLong(b.getId());
-        long pidSafe = nzLong(pid);
-        long hidSafe = nzLong(hid);
-
-        double amount = 0.0;
-        BigDecimal amt = b.getAmount();
-        if (amt != null) amount = amt.doubleValue();
-
-        boolean paid = Boolean.TRUE.equals(b.getPaid());
+        BigDecimal total = nz(b.getAmount());
+        boolean paidFlag = Boolean.TRUE.equals(b.getPaid());
+        BigDecimal amountPaid = paidFlag ? total : BigDecimal.ZERO;
+        BigDecimal outstanding = paidFlag ? BigDecimal.ZERO : total;
 
         return BillDto.newBuilder()
                 .setId(idSafe)
                 .setPatientId(pidSafe)
                 .setHospitalId(hidSafe)
-                .setAmount(amount)
-                .setPaid(paid)
+                // if you don't split tax, treat subtotal = total
+                .setSubtotalAmount(toMoney(defaultCurrency(), total))
+                .setTaxAmount(toMoney(defaultCurrency(), BigDecimal.ZERO))
+                .setTotalAmount(toMoney(defaultCurrency(), total))
+                .setAmountPaid(toMoney(defaultCurrency(), amountPaid))
+                .setOutstandingAmount(toMoney(defaultCurrency(), outstanding))
                 .build();
     }
 
-    private static long nzLong(Long v) { return v == null ? 0L : v; }
+    private static long nz(Long v) { return v == null ? 0L : v; }
+    private static BigDecimal nz(BigDecimal v) { return v == null ? BigDecimal.ZERO : v; }
+
+    private static String defaultCurrency() {
+        // TODO: ideally fetch from hospital currency; EUR as a safe default
+        return "EUR";
+    }
+
+    /** Convert decimal to google.type.Money (units + nanos). */
+    private static Money toMoney(String currency, BigDecimal amount) {
+        // Handle negatives correctly
+        BigDecimal abs = amount.abs();
+        BigDecimal unitsBd = abs.setScale(0, RoundingMode.DOWN);
+        BigDecimal nanosBd = abs.subtract(unitsBd).movePointRight(9).setScale(0, RoundingMode.HALF_UP);
+
+        long units = unitsBd.longValueExact();
+        int nanos = nanosBd.intValueExact();
+        if (nanos == 1_000_000_000) { units += 1; nanos = 0; }
+
+        // apply sign
+        if (amount.signum() < 0) units = -units;
+
+        return Money.newBuilder()
+                .setCurrencyCode(currency)
+                .setUnits(units)
+                .setNanos(nanos)
+                .build();
+    }
 }

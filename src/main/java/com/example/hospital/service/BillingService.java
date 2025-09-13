@@ -35,13 +35,11 @@ public class BillingService {
         var h = hospitalRepo.findById(hospitalId)
                 .orElseThrow(() -> new NoSuchElementException("Hospital " + hospitalId + " not found"));
 
-        // All non-cancelled stays for this (patient, hospital)
+        // All completed stays (have start & end date) for this (patient, hospital)
         List<Stay> stays = stayRepo.findByPatientId(patientId).stream()
                 .filter(s -> s != null && s.getStartDate() != null && s.getEndDate() != null)
                 .filter(s -> s.getHospital() != null && Objects.equals(s.getHospital().getId(), hospitalId))
-                .filter(s -> !s.isCancelled())   // <-- use isCancelled() here
                 .toList();
-
 
         // Inclusive day count per stay
         long totalDays = stays.stream()

@@ -6,73 +6,297 @@ option java_multiple_files = true;
 option java_package = "com.example.hospital.grpc";
 option java_outer_classname = "HospitalProto";
 
-// -------- Common DTOs --------
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "google/type/money.proto";
+import "google/type/date.proto";
+
+// ===== Enums =====
+enum StayStatus {
+  STAY_STATUS_UNSPECIFIED = 0;
+  STAY_STATUS_SCHEDULED   = 1;
+  STAY_STATUS_ONGOING     = 2;
+  STAY_STATUS_COMPLETED   = 3;
+  STAY_STATUS_CANCELLED   = 4;
+}
+
+enum BillStatus {
+  BILL_STATUS_UNSPECIFIED = 0;
+  BILL_STATUS_DRAFT        = 1;
+  BILL_STATUS_ISSUED       = 2;
+  BILL_STATUS_PARTIALLY_PAID = 3;
+  BILL_STATUS_PAID         = 4;
+  BILL_STATUS_VOID         = 5;
+}
+
+enum RegistrationStatus {
+  REG_STATUS_UNSPECIFIED = 0;
+  REG_STATUS_ACTIVE      = 1;
+  REG_STATUS_INACTIVE    = 2;
+}
+
+// ===== Common DTOs =====
 message HospitalDto {
   int64 id = 1;
   string name = 2;
-  string address = 3;
+  string legal_name = 3;
+  string address = 4;
+  string timezone = 5; // IANA, e.g. "Europe/Berlin"
+  string currency_code = 6; // ISO 4217, e.g. "EUR"
+  google.type.Money default_rate_per_day = 7; // snapshot for default billing
+  bool is_active = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
 }
 
 message PatientDto {
   int64 id = 1;
   string first_name = 2;
   string last_name = 3;
+  google.type.Date dob = 4;
+  google.protobuf.StringValue email = 5;
+  google.protobuf.StringValue phone = 6;
+  bool is_active = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message RegistrationDto {
+  int64 id = 1;
+  int64 patient_id = 2;
+  int64 hospital_id = 3;
+  RegistrationStatus status = 4;
+  google.protobuf.Timestamp registered_at = 5;
+  google.protobuf.StringValue notes = 6;
 }
 
 message StayDto {
   int64 id = 1;
   int64 patient_id = 2;
   int64 hospital_id = 3;
-  string start_date = 4;  // ISO yyyy-MM-dd
-  string end_date = 5;    // ISO yyyy-MM-dd
-  bool cancelled = 6;
+  google.protobuf.Timestamp admit_at = 4;     // TZ-aware
+  google.protobuf.Timestamp discharge_at = 5; // nullable until set
+  StayStatus status = 6;
+  // rate snapshot applied to this stay (falls back to hospital default when created)
+  google.type.Money rate_per_day = 7;
+  google.protobuf.StringValue reason = 8;
+  google.protobuf.StringValue ward = 9;
+  google.protobuf.StringValue cancel_reason = 10;
+  int32 version = 11; // optimistic locking
+}
+
+message BillItemDto {
+  int64 id = 1;
+  int64 bill_id = 2;
+  google.protobuf.Int64Value stay_id = 3; // nullable for manual items
+  string description = 4;
+  int32 quantity_days = 5;
+  google.type.Money unit_price_per_day = 6;
+  google.type.Money line_total = 7;
 }
 
 message BillDto {
   int64 id = 1;
   int64 patient_id = 2;
   int64 hospital_id = 3;
-  double amount = 4;
-  bool paid = 5;
+  string bill_number = 4;
+  BillStatus status = 5;
+  google.type.Money subtotal_amount = 6;
+  google.type.Money tax_amount = 7;
+  google.type.Money total_amount = 8;
+  google.type.Money amount_paid = 9;
+  google.type.Money outstanding_amount = 10;
+  google.protobuf.Timestamp issue_ts = 11;
+  google.protobuf.Timestamp due_ts = 12;
+  repeated BillItemDto items = 13;
 }
 
-// -------- Requests / Responses --------
+message PaymentDto {
+  int64 id = 1;
+  int64 bill_id = 2;
+  google.type.Money amount = 3;
+  string method = 4; // cash/card/bank_transfer/insurance
+  google.protobuf.Timestamp received_at = 5;
+  google.protobuf.StringValue reference = 6;
+}
+
+// ===== Pagination =====
+message PageRequest {
+  google.protobuf.Int32Value size = 1;   // default server-side
+  google.protobuf.StringValue page_token = 2; // opaque cursor
+}
+message PageResponse {
+  google.protobuf.StringValue next_page_token = 1;
+}
+
+// ===== Requests / Responses =====
 message IdRequest { int64 id = 1; }
-
-message CreateHospitalRequest { string name = 1; string address = 2; }
-message UpdateHospitalRequest { int64 id = 1; string name = 2; string address = 3; }
-message HospitalListResponse { repeated HospitalDto hospitals = 1; }
-
-message CreatePatientRequest { string first_name = 1; string last_name = 2; }
-message UpdatePatientRequest { int64 id = 1; string first_name = 2; string last_name = 3; }
-message PatientListResponse { repeated PatientDto patients = 1; }
-
-message RegisterPatientRequest { int64 patient_id = 1; int64 hospital_id = 2; }
-
-message StayRequest {
-  int64 patient_id = 1;
-  int64 hospital_id = 2;
-  string start_date = 3;
-  string end_date = 4;
-}
-
-message QuarterRequest { int64 patient_id = 1; int32 year = 2; int32 quarter = 3; }
-message QuarterSummary { int64 total_days = 1; double billed_amount = 2; }
-message StayListResponse { repeated StayDto stays = 1; }
-
-message BillRequest { int64 patient_id = 1; int64 hospital_id = 2; }
-message BillListResponse { repeated BillDto bills = 1; }
-
 message Empty {}
 
-// -------- Services --------
+message CreateHospitalRequest {
+  string name = 1;
+  string legal_name = 2;
+  string address = 3;
+  string timezone = 4;
+  string currency_code = 5;
+  google.type.Money default_rate_per_day = 6;
+}
+message UpdateHospitalRequest {
+  int64 id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue legal_name = 3;
+  google.protobuf.StringValue address = 4;
+  google.protobuf.StringValue timezone = 5;
+  google.protobuf.StringValue currency_code = 6;
+  google.type.Money default_rate_per_day = 7;
+  google.protobuf.BoolValue is_active = 8;
+}
+message ListHospitalsRequest {
+  google.protobuf.BoolValue active_only = 1;
+  google.protobuf.StringValue search = 2;
+  PageRequest page = 3;
+}
+message HospitalListResponse {
+  repeated HospitalDto hospitals = 1;
+  PageResponse page = 2;
+}
+
+message CreatePatientRequest {
+  string first_name = 1;
+  string last_name = 2;
+  google.type.Date dob = 3;
+  google.protobuf.StringValue email = 4;
+  google.protobuf.StringValue phone = 5;
+}
+message UpdatePatientRequest {
+  int64 id = 1;
+  google.protobuf.StringValue first_name = 2;
+  google.protobuf.StringValue last_name = 3;
+  google.type.Date dob = 4;
+  google.protobuf.StringValue email = 5;
+  google.protobuf.StringValue phone = 6;
+  google.protobuf.BoolValue is_active = 7;
+}
+message PatientListRequest {
+  google.protobuf.Int64Value hospital_id = 1; // filter when listing
+  google.protobuf.StringValue search = 2;
+  PageRequest page = 3;
+}
+message PatientListResponse {
+  repeated PatientDto patients = 1;
+  PageResponse page = 2;
+}
+
+message RegisterPatientRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2;
+  google.protobuf.Timestamp registered_at = 3;
+}
+message RegistrationListRequest {
+  google.protobuf.Int64Value patient_id = 1;
+  google.protobuf.Int64Value hospital_id = 2;
+  RegistrationStatus status = 3;
+  PageRequest page = 4;
+}
+message RegistrationListResponse {
+  repeated RegistrationDto registrations = 1;
+  PageResponse page = 2;
+}
+
+message CreateStayRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2;
+  google.protobuf.Timestamp admit_at = 3;
+  google.protobuf.Timestamp discharge_at = 4; // optional
+  google.type.Money rate_per_day = 5; // optional override
+  google.protobuf.StringValue reason = 6;
+  google.protobuf.StringValue ward = 7;
+}
+message UpdateStayRequest {
+  int64 id = 1;
+  google.protobuf.Timestamp discharge_at = 2;
+  google.type.Money rate_per_day = 3;
+  google.protobuf.StringValue reason = 4;
+  google.protobuf.StringValue ward = 5;
+  int32 version = 6; // required for optimistic locking
+}
+message CancelStayRequest {
+  int64 id = 1;
+  google.protobuf.StringValue cancel_reason = 2;
+  int32 version = 3;
+}
+message StayListRequest {
+  int64 patient_id = 1;
+  google.protobuf.Int64Value hospital_id = 2;
+  StayStatus status = 3;
+  google.protobuf.Timestamp from = 4;
+  google.protobuf.Timestamp to = 5;
+  PageRequest page = 6;
+}
+message StayListResponse {
+  repeated StayDto stays = 1;
+  PageResponse page = 2;
+}
+
+message QuarterRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2; // quarter is computed in this hospital's timezone
+  int32 year = 3;
+  int32 quarter = 4; // 1..4
+}
+message QuarterSummary {
+  int64 total_billable_days = 1;
+  google.type.Money billed_amount = 2;
+  repeated StayDto stays = 3; // optional detail
+}
+
+message GenerateBillRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2;
+  repeated int64 stay_ids = 3; // must be COMPLETED, not CANCELLED, not already billed
+  google.protobuf.Timestamp issue_ts = 4;
+  google.protobuf.Timestamp due_ts = 5;
+}
+message ListBillsRequest {
+  int64 patient_id = 1;
+  google.protobuf.Int64Value hospital_id = 2;
+  BillStatus status = 3;
+  PageRequest page = 4;
+}
+message BillListResponse {
+  repeated BillDto bills = 1;
+  PageResponse page = 2;
+}
+message BalanceRequest {
+  int64 patient_id = 1;
+  int64 hospital_id = 2;
+}
+message BalanceResponse {
+  google.type.Money outstanding_balance = 1;
+}
+message AddPaymentRequest {
+  int64 bill_id = 1;
+  google.type.Money amount = 2;
+  string method = 3;
+  google.protobuf.Timestamp received_at = 4;
+  google.protobuf.StringValue reference = 5;
+}
+message PaymentListResponse {
+  repeated PaymentDto payments = 1;
+}
+
+// ===== Services =====
 service HospitalService {
   rpc CreateHospital(CreateHospitalRequest) returns (HospitalDto);
   rpc UpdateHospital(UpdateHospitalRequest) returns (HospitalDto);
-  rpc DeleteHospital(IdRequest) returns (Empty);
-  rpc ListHospitals(Empty) returns (HospitalListResponse);
+  rpc DeleteHospital(IdRequest) returns (Empty); // should soft-delete
+  rpc ListHospitals(ListHospitalsRequest) returns (HospitalListResponse);
 
-  rpc RegisterPatient(RegisterPatientRequest) returns (Empty);
+  // Registrations (many-to-many)
+  rpc RegisterPatient(RegisterPatientRequest) returns (RegistrationDto);
+  rpc ListRegistrations(RegistrationListRequest) returns (RegistrationListResponse);
+
+  // Convenience
   rpc ListPatientsOfHospital(IdRequest) returns (PatientListResponse);
   rpc ListHospitalsOfPatient(IdRequest) returns (HospitalListResponse);
 }
@@ -80,18 +304,23 @@ service HospitalService {
 service PatientService {
   rpc CreatePatient(CreatePatientRequest) returns (PatientDto);
   rpc UpdatePatient(UpdatePatientRequest) returns (PatientDto);
-  rpc DeletePatient(IdRequest) returns (Empty);
+  rpc DeletePatient(IdRequest) returns (Empty); // soft-delete recommended
+  rpc ListPatients(PatientListRequest) returns (PatientListResponse);
 }
 
 service StayService {
-  rpc CreateStay(StayRequest) returns (StayDto);
-  rpc CancelStay(IdRequest) returns (StayDto);
-  rpc ListStaysOfPatient(IdRequest) returns (StayListResponse);
+  rpc CreateStay(CreateStayRequest) returns (StayDto);
+  rpc UpdateStay(UpdateStayRequest) returns (StayDto); // e.g., discharge/set fields
+  rpc CancelStay(CancelStayRequest) returns (StayDto);
+  rpc ListStays(StayListRequest) returns (StayListResponse);
   rpc GetQuarterSummary(QuarterRequest) returns (QuarterSummary);
 }
 
 service BillingService {
-  rpc GenerateBill(BillRequest) returns (BillDto);
-  rpc ListBillsForPatient(IdRequest) returns (BillListResponse);
-  rpc GetOutstandingBalance(BillRequest) returns (BillDto); // amount only/paid=false
+  rpc GenerateBill(GenerateBillRequest) returns (BillDto);
+  rpc ListBillsForPatient(ListBillsRequest) returns (BillListResponse);
+  rpc GetBill(IdRequest) returns (BillDto);
+  rpc AddPayment(AddPaymentRequest) returns (PaymentDto);
+  rpc ListPayments(IdRequest) returns (PaymentListResponse);
+  rpc GetOutstandingBalance(BalanceRequest) returns (BalanceResponse);
 }
