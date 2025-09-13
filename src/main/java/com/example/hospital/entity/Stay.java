@@ -30,10 +30,11 @@ public class Stay {
             foreignKey = @ForeignKey(name = "fk_stay_hospital"))
     private Hospital hospital;
 
-    @Column(nullable = false)
+    @Column(name ="start_date", nullable = true)
     private LocalDate startDate;
 
     // null while ongoing; set when discharged
+    @Column(name = "end_date", nullable = true)
     private LocalDate endDate;
 
     // 🔹 Put StayStatus here (replaces the old boolean 'cancelled')
@@ -41,7 +42,7 @@ public class Stay {
     @Column(nullable = false, length = 10)
     private StayStatus status;
 
-    @Column(length = 200)
+    @Column(name = "cancellation_reason", length = 200)
     private String cancellationReason;
 
     @PrePersist

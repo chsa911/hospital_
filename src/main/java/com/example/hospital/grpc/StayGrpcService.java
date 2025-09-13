@@ -48,13 +48,24 @@ public class StayGrpcService extends StayServiceGrpc.StayServiceImplBase {
     @Override
     public void cancelStay(CancelStayRequest req, StreamObserver<StayDto> out) {
         try {
-            Stay s = svc.cancel(req.getId());
+            Stay s = svc.cancel(req.getId());  // you can pass req.getCancelReason() into svc if you wired it
             out.onNext(toDto(s));
             out.onCompleted();
+        } catch (java.util.NoSuchElementException e) {
+            out.onError(io.grpc.Status.NOT_FOUND
+                    .withDescription("Stay " + req.getId() + " not found")
+                    .asRuntimeException());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            out.onError(io.grpc.Status.FAILED_PRECONDITION
+                    .withDescription("Cannot cancel stay: " + e.getMostSpecificCause().getMessage())
+                    .asRuntimeException());
         } catch (Exception e) {
-            out.onError(io.grpc.Status.INTERNAL.withDescription("Failed to cancel stay").asRuntimeException());
+            out.onError(io.grpc.Status.INTERNAL
+                    .withDescription("Failed to cancel stay")
+                    .asRuntimeException());
         }
     }
+
 
     @Override
     public void listStays(StayListRequest req, StreamObserver<StayListResponse> out) {
